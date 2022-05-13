@@ -121,6 +121,7 @@ int CreateTree(TChild* shmemAddr, int childNum)
     exit(-1);
   } 
 
+  //Create childs in cycle
   int i = 0, iResult;
   int isParent = 1, isMyChild;
   int parNum = childNum;
@@ -136,6 +137,8 @@ int CreateTree(TChild* shmemAddr, int childNum)
       case 0:
         treeStructure[childNum].selfPid = getpid();
         treeStructure[childNum].parentPid = getppid();
+
+        //Set process group
         if (treeStructure[childNum].elInGroup == -1){
           iResult = setpgid(0, 0);
         }else{
@@ -145,9 +148,13 @@ int CreateTree(TChild* shmemAddr, int childNum)
         treeStructure[childNum].selfPgid = getpgid(0);
         ERROR_CHECK(treeStructure[childNum].selfPgid, 0, "Can not get self group", -1);
         memcpy(shmemAddr, treeStructure, SHARED_MEMORY_OBJECT_SIZE);
+
+        //If process has childs then call function recursively
         if (treeStructure[childNum].childCount != 0){
           CreateTree(shmemAddr, childNum);
         } 
+
+        //Set semaphore to parent process
         memcpy(treeStructure, shmemAddr, SHARED_MEMORY_OBJECT_SIZE);
         treeStructure[0].parentPid = getppid();
         memcpy(shmemAddr, treeStructure, SHARED_MEMORY_OBJECT_SIZE);
