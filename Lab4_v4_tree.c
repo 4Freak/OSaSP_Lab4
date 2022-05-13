@@ -38,7 +38,6 @@ typedef struct _TChild
 int FillSharedMemory(TChild* shmemAddr);
 int CreateTree(TChild* shmemAddr, int childNum);
 
-
 int main()
 {
   int iResult;
@@ -97,10 +96,11 @@ int FillSharedMemory(TChild* shmemAddr)
   treeStructure[0].childCount = 1;
   treeStructure[1].childCount = 4;
   treeStructure[5].childCount = 3;
-  for (i = 1; i < 6; i++){
-    treeStructure[i].elInGroup = 1;
+  for (i = 2; i < 6; i++){
+    treeStructure[i].elInGroup = 2;
   }
   treeStructure[1].elInGroup = -1;
+  treeStructure[2].elInGroup = -1;
   for (i = 7; i < AM_OF_PROCESSES; i++){
     treeStructure[i].elInGroup = 6;
   }
@@ -115,9 +115,6 @@ int CreateTree(TChild* shmemAddr, int childNum)
 {
   TChild treeStructure[AM_OF_PROCESSES];
   memcpy(treeStructure, shmemAddr, SHARED_MEMORY_OBJECT_SIZE);
-    for (int i = 0; i < AM_OF_PROCESSES; i++){
-    printf("Child %d, Pid: %04d, PPid: %04d, ChildCount: %d, Group: %d, GroupEl: %d\n", i, treeStructure[i].selfPid, treeStructure[i].parentPid, treeStructure[i].childCount, treeStructure[i].selfPgid, treeStructure[i].elInGroup); 
-  }
   sem_t *semIsCreated = sem_open(IS_CREATED_SEM_NAME, 0);
   if (semIsCreated == SEM_FAILED){
     perror("Could not open semaphore");
@@ -128,7 +125,6 @@ int CreateTree(TChild* shmemAddr, int childNum)
   int isParent = 1, isMyChild;
   int parNum = childNum;
   while (i < treeStructure[parNum].childCount && isParent){
-    printf("pid: %04d start while, child num: %d, child count: %d, iteration: %d\n", getpid(), childNum, treeStructure[childNum].childCount, i); 
     isParent = 0;
     childNum++;
     treeStructure[childNum].selfPid = fork();
@@ -149,18 +145,14 @@ int CreateTree(TChild* shmemAddr, int childNum)
         treeStructure[childNum].selfPgid = getpgid(0);
         ERROR_CHECK(treeStructure[childNum].selfPgid, 0, "Can not get self group", -1);
         memcpy(shmemAddr, treeStructure, SHARED_MEMORY_OBJECT_SIZE);
-        printf("pid: %04d before child count check, child num: %d, child count: %d\n", getpid(), childNum, treeStructure[childNum].childCount); 
         if (treeStructure[childNum].childCount != 0){
           CreateTree(shmemAddr, childNum);
-          printf("Pid: %d out from create tree, child count: %d\n", getpid(), treeStructure[childNum].childCount);
         } 
         memcpy(treeStructure, shmemAddr, SHARED_MEMORY_OBJECT_SIZE);
         treeStructure[0].parentPid = getppid();
         memcpy(shmemAddr, treeStructure, SHARED_MEMORY_OBJECT_SIZE);
         iResult = sem_post(semIsCreated);
-        ERROR_CHECK(iResult, 0, "Could not set semaphore", -1);
-        printf("Pid: %04d set semaphore to %d\n", getpid(), treeStructure[0].parentPid);
-        
+        ERROR_CHECK(iResult, 0, "Could not set semaphore", -1);        
         while(1); //MB should delete
         break;
       default:
@@ -170,13 +162,13 @@ int CreateTree(TChild* shmemAddr, int childNum)
           iResult = sem_wait(semIsCreated);
           ERROR_CHECK(iResult, 0, "Can not wait semaphore", -1);
           memcpy(treeStructure, shmemAddr, SHARED_MEMORY_OBJECT_SIZE);
-          printf("Pid: %04d get semaphore to %d\n", getpid(), treeStructure[0].parentPid);
+
+          //Check is correct process recive semaphore
           if (treeStructure[0].parentPid == getpid()){
             isMyChild = 1;
           }else{
             iResult = sem_post(semIsCreated);
             ERROR_CHECK(iResult, 0, "Could not set semaphore", -1);
-            printf("Pid: %04d set semaphore\n", getpid());
             sleep(1);
           }
         }
