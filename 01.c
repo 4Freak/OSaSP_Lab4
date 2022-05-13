@@ -11,6 +11,9 @@
 
 #define AM_OF_PIDS 2
 #define IS_CREATED_SEM_NAME "/is_created_semaphore"
+#define SLEEP_TIME 100 * 1000
+
+int num = 0;
 
 //Procedure to run it to child nodes
 int ChildProcMain(int childInd);
@@ -30,7 +33,7 @@ int main()
   //Array of child processes
   pid_t childPids[AM_OF_PIDS];
   int i = 0;
-  int childCount = 0, isParent = 1;
+  int isParent = 1; 
 
   //While less then amount of child processes and it's Parent process do create new child process
   while (i < AM_OF_PIDS && isParent){
@@ -46,9 +49,8 @@ int main()
         break;
       default:
         isParent = 1;
-        childCount++;
         if (sem_wait(semIsCreated) < 0){
-          perror("Do not wait semaphore");
+          perror("Can not wait semaphore");
           return -3;
         }
         break;
@@ -109,7 +111,7 @@ int main()
       perror("Cannot send SIGUSER1 to childs");
       return -10;
     } 
-    printf("Parrent Pid: %d                  Time: %03d send SIGUSER1 to childs\n", getpid(), MSec); 
+    printf("Number: %d Pid: %d                  Time: %03d send SIGUSER1 to childs\n", num, getpid(), MSec); 
   }
   while(1);
 
@@ -125,7 +127,12 @@ void ParentSIGUSR2(int signal, siginfo_t* signalInfo, void* context)
 	else {
 		int MSec = TV.tv_usec / 1000;
 	
-		printf("Parrent Pid: %d                  Time: %03d Get  SIGUSR2 from %d\n", getpid(), MSec, signalInfo->si_pid);	
+		printf("Number: %d Pid: %d                  Time: %03d Get  SIGUSR2 from %d\n", num, getpid(), MSec, signalInfo->si_pid);	
+
+    if (usleep(SLEEP_TIME) == -1){
+      perror("Can not sleep");
+      return;
+    }
 
     if (gettimeofday(&TV, NULL) < 0)
       perror("Can not get current time\n");
@@ -134,7 +141,8 @@ void ParentSIGUSR2(int signal, siginfo_t* signalInfo, void* context)
       if (kill(0, SIGUSR1)){
         perror("Cannot send SIGUSER1 to childs");
       } 
-      printf("Parrent Pid: %d                  Time: %03d Send SIGUSER1 to childs\n", getpid(), MSec); 
+      num++;
+      printf("Number: %d Pid: %d                  Time: %03d Send SIGUSER1 to childs\n", num, getpid(), MSec); 
     }
   }
 }
@@ -206,8 +214,8 @@ void ChildUSR1(int signal, siginfo_t* signalInfo, void* context)
 		perror("Can not get current time\n");
 	else {
 		int MSec = TV.tv_usec / 1000;
-	
-		printf("Pid:         %d Parent pid: %d Time: %03d Get  SIGUSR1\n", getpid(), getppid(), MSec);	
+
+		printf("Number: %d Pid: %d Parent pid: %d Time: %03d Get  SIGUSR1\n", num, getpid(), getppid(), MSec);	
 
     if (gettimeofday(&TV, NULL) < 0)
       perror("Can not get current time\n");
@@ -216,7 +224,8 @@ void ChildUSR1(int signal, siginfo_t* signalInfo, void* context)
       if (kill(getppid(), SIGUSR2)){
         perror("Cannot send SIGUSER2 to parent");
       } 
-      printf("Pid:         %d Parent pid: %d Time: %03d Send SIGNUSR2\n", getpid(), getppid(), MSec);
+      num++;
+      printf("Number: %d Pid: %d Parent pid: %d Time: %03d Send SIGNUSR2\n", num, getpid(), getppid(), MSec);
     }    
   }
 }
