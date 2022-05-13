@@ -96,7 +96,7 @@ int main()
   act.sa_sigaction = ParentSIGUSR2;
   act.sa_mask = mask;
   act.sa_flags = SA_SIGINFO;
-  if (sigaction(SIGUSR2, &act, NULL)){
+  if (sigaction(SIGUSR2, &act, NULL) < 0){
     perror("Cannot create SIGUSER2 handler in parent");
     return -9;
   }
@@ -178,7 +178,7 @@ int ChildProcMain(int childInd)
   act.sa_sigaction = ChildUSR1;
   act.sa_mask = mask;
   act.sa_flags = SA_SIGINFO;
-  if (sigaction(SIGUSR1, &act, NULL)){
+  if (sigaction(SIGUSR1, &act, NULL) < 0){
     perror("Cannot create SIGUSER1 handler in child");
     return -9;
   }
