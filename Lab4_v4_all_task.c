@@ -43,7 +43,10 @@ int FillSharedMemory(TChild* shmemAddr);
 //Create process tree according tree structure in shared memory
 int CreateTree(TChild* shmemAddr, int childNum);
 
+//Addres of shared memory
 TChild* shmemAddr;
+
+//Number of signals
 int numOfSig = 0;
 
 int main()
@@ -70,16 +73,19 @@ int main()
   //Create tree
   CreateTree(shmemAddr, 0);
 
-  //Debug output
   TChild treeStructure[AM_OF_PROCESSES];
   memcpy(treeStructure, shmemAddr, SHARED_MEMORY_OBJECT_SIZE);
-  for (int i = 0; i < AM_OF_PROCESSES; i++){
-    printf("Child %d, Pid: %04d, PPid: %04d, ChildCount: %d, Group: %d, GroupEl: %d\n", i, treeStructure[i].selfPid, treeStructure[i].parentPid, treeStructure[i].childCount, treeStructure[i].selfPgid, treeStructure[i].elInGroup); 
-  }
 
+  //Debug output
+  /*for (int i = 0; i < AM_OF_PROCESSES; i++){
+    printf("Child %d, Pid: %04d, PPid: %04d, ChildCount: %d, Group: %d, GroupEl: %d\n", i, treeStructure[i].selfPid, treeStructure[i].parentPid, treeStructure[i].childCount, treeStructure[i].selfPgid, treeStructure[i].elInGroup); 
+  }*/
+
+  //Send start signal to child 1
   iResult = kill(treeStructure[1].selfPid, SIGUSR1);
   ERROR_CHECK(iResult, 0, "Can not send SIGUSR1", -1);
 
+  //Wait child 1
   iResult = waitpid(treeStructure[1].selfPid, NULL, 0);
   ERROR_CHECK(iResult, 0, "Can not wait pid", -1);
 
@@ -94,12 +100,16 @@ int main()
   ERROR_CHECK(iResult, 0, "Cannot 'close' shared memory", -1);
   iResult = shm_unlink(SHARED_MEMORY_OBJECT_NAME);
   ERROR_CHECK(iResult, 0, "Cannot unlink shared memory", -1);
-  printf("No errors\n %d", getpid());
   return 0;
 }
 
+//Only recive signal SIGUSR1
 void ChildSIGUSR1Recive(int signal, siginfo_t* signalInfo, void* context);
+
+//Recive and send signal SIGUSR1
 void ChildSIGUSR1ReciveSend(int signal, siginfo_t* signalInfo, void* context);
+
+//OnlyRecive signal SIGTERM
 void ChildSIGTERMRecive(int signal, siginfo_t* signalInfo, void* context);
 
 int FillSharedMemory(TChild* shmemAddr)
@@ -143,12 +153,14 @@ int FillSharedMemory(TChild* shmemAddr)
   treeStructure[5].act.sa_sigaction = ChildSIGUSR1ReciveSend;
   treeStructure[8].act.sa_sigaction = ChildSIGUSR1ReciveSend;
 
+  //Apply changes
   memcpy(shmemAddr, treeStructure, SHARED_MEMORY_OBJECT_SIZE); //May be 1 mistake here
   return 0;
 }
 
 void ChildSIGUSR1Recive(int signal, siginfo_t* signalInfo, void* context)
 {
+  numOfSig++;
   struct timeval TV;
   if (gettimeofday(&TV, NULL) < 0)
 		perror("Can not get current time\n");
@@ -191,14 +203,14 @@ void ChildSIGUSR1ReciveSend(int signal, siginfo_t* signalInfo, void* context)
 	  else {
       MKSec = TV.tv_sec * 1000000 + TV.tv_usec;
       int iResult;
+
+      //If child 1 get 102 signals then send itself SIGTERM
       if (childNum == 1 && numOfSig >= AM_OF_SIGNALS + 1){
-        printf("Send first sigterm"); //Debug
-        iResult = kill(0, SIGTERM);
+        iResult = kill(treeStructure[1].selfPid, SIGTERM);
         ERROR_CHECK(iResult, 0, "Can not send SIGTERM", -1);
       }else{
         iResult = kill(-1 * treeStructure[recvChildNum].selfPid, SIGUSR1);
         ERROR_CHECK(iResult, 0, "Can not send SIGUSR1", -1);
-        printf("Num: %d has number: %d", childNum, numOfSig);
         printf("Num: %d Pid: %d PPid: %d Send SIGUSR1 Time: %lld\n", childNum, getpid(), getppid(), MKSec);
       }
     }
@@ -214,6 +226,8 @@ void ChildSIGTERMRecive(int signal, siginfo_t* signalInfo, void* context)
   while (treeStructure[childNum].selfPid != getpid()){
     childNum++;
   }
+
+  //If pid have child then send to child gorup SIGTERM and wait it
   if (treeStructure[childNum].childCount != 0){
     iResult = kill(-1 * (treeStructure[childNum+1].selfPid), SIGTERM);
     ERROR_CHECK(iResult, 0, "Can not send SIGTERM", -1);
@@ -227,6 +241,7 @@ void ChildSIGTERMRecive(int signal, siginfo_t* signalInfo, void* context)
   exit(0);
 }
 
+//Fill child element
 int FillChildElement(TChild* shmemAddr, int childNum);
 
 int CreateTree(TChild* shmemAddr, int childNum)
@@ -314,16 +329,21 @@ int FillChildElement(TChild* shmemAddr, int childNum)
   //Set signal handler
   iResult = sigaction(SIGUSR1, &treeStructure[childNum].act, NULL);
   ERROR_CHECK(iResult, 0, "Can not create SIGUSR1 handler", -1);
-  sigset_t maskSIGTERM = treeStructure[childNum].act.sa_mask;
+  sigset_t maskSIGTERM;
+  iResult = sigemptyset(&maskSIGTERM);
+  ERROR_CHECK(iResult, 0, "Can not set empy mask", -1);
   iResult = sigaddset(&maskSIGTERM, SIGTERM);
   ERROR_CHECK(iResult, 0, "Can not set mask", -1);
+  
+  //Set signal handler of SIGTERM
   struct sigaction act;
-  act.sa_sigaction = ChildSIGUSR1Recive;
+  act.sa_sigaction = ChildSIGTERMRecive;
   act.sa_mask = maskSIGTERM;
   act.sa_flags = SA_SIGINFO;
   iResult = sigaction(SIGTERM, &act, NULL);
   ERROR_CHECK(iResult, 0, "Can not set SIGTERM handler", -1);
 
+  //Apply changes
   memcpy(shmemAddr, treeStructure, SHARED_MEMORY_OBJECT_SIZE);
   return 0;
 }
